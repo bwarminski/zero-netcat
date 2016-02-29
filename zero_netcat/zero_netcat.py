@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import six, sys, argparse, zmq, codecs, os
-import random, time
+import six, sys, argparse, zmq, codecs, os, zmq.devices
+from six.moves import range
 
 # zeronc <bind|connect> <type> <address>
 
@@ -15,6 +15,14 @@ SOCKET_FROM_STR = {
 SENDS = ['pub', 'push']
 RECEIVES = ['sub', 'pull']
 
+class AddressAction(argparse.Action):
+    def __call__(self, parent_parser, namespace, values, option_string=None):
+        if len(values) % 3 != 0: raise argparse.ArgumentError(self, "Address requires three arguments per address")
+        parser = argparse.ArgumentParser()
+        parser.add_argument('bind_connect', choices=['bind', 'connect'])
+        parser.add_argument('type', choices=SOCKET_FROM_STR.keys(), metavar='type')
+        parser.add_argument('address')
+        setattr(namespace, self.dest, [parser.parse_args(values[i:i+3]) for i in range(0, len(values), 3)])
 
 def main(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='Connects stdin and stdout to a ZeroMQ socket')
@@ -24,48 +32,58 @@ def main(args=sys.argv[1:]):
     parser.add_argument('--receive-hwm', type=int, default=1000)
     parser.add_argument('--subscribe', action='append')
     parser.add_argument('--topic', default='default_topic')
-    parser.add_argument('bind_connect', choices=['bind', 'connect'])
-    parser.add_argument('type', choices=SOCKET_FROM_STR.keys(), metavar='type')
-    parser.add_argument('address')
+    parser.add_argument('address', nargs='+', action=AddressAction)
     options = parser.parse_args(args)
-
-    context = zmq.Context(options.io_threads)
+    six._print(options)
+    context = zmq.Context.instance(options.io_threads)
     context.set(zmq.IPV6, 1 if options.ipv6 else 0)
+    send(context, options) if options.address[0].type in SENDS else receive(context, options)
 
-    socket = context.socket(SOCKET_FROM_STR[options.type])
-    send(socket, options) if options.type in SENDS else receive(socket, options)
 
-def send(socket, options):
-    socket.setsockopt(zmq.SNDHWM, options.send_hwm)
-    is_pub = options.type == 'pub'
-    if options.bind_connect == 'bind':
-        socket.bind(options.address)
-    else:
-        socket.connect(options.address)
+def send(context, options):
+    bcast = context.socket(zmq.PUB)
+    bcast.bind('inproc://bcast')
+
+    for addr in options.address:
+        proxy = zmq.devices.ThreadProxy(zmq.SUB, SOCKET_FROM_STR[addr.type])
+        proxy.setsockopt_out(zmq.SNDHWM, options.send_hwm)
+        if addr.bind_connect == 'bind':
+            proxy.bind_out(addr.address)
+        else:
+            proxy.connect_out(addr.address)
+        proxy.setsockopt_in(zmq.SUBSCRIBE, six.u('').encode('utf-8'))
+        proxy.connect_in('inproc://bcast')
+        proxy.start()
 
     input = os.fdopen(sys.stdin.fileno(), 'r', 1)
     while True:
         line = input.readline()
         if not line: break
-        if is_pub:
-            socket.send_multipart([options.topic.encode('utf-8'), line.rstrip().encode('utf-8')])
+        bcast.send_multipart([options.topic.encode('utf-8'), line.rstrip().encode('utf-8')])
+
+
+def receive(context, options):
+    input = context.socket(zmq.PULL)
+    input.bind('inproc://input')
+
+    for addr in options.address:
+        proxy = zmq.devices.ThreadProxy(SOCKET_FROM_STR[addr.type], zmq.PUSH)
+        proxy.setsockopt_in(zmq.RCVHWM, options.receive_hwm)
+        if addr.type == 'sub':
+            if not options.subscribe:
+                proxy.setsockopt_in(zmq.SUBSCRIBE, six.u('').encode('utf-8'))
+            else:
+                for topic in options.subscribe:
+                    proxy.setsockopt_in(zmq.subscribe, six.u(topic).encode('utf-8'))
+
+        if addr.bind_connect == 'bind':
+            proxy.bind_in(addr.address)
         else:
-            socket.send_string(line)
-
-
-def receive(socket, options):
-    socket.setsockopt(zmq.RCVHWM, options.receive_hwm)
+            proxy.connect_in(addr.address)
+        proxy.connect_out('inproc://input')
+        proxy.start()
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
-    socket.bind(options.address) if options.bind_connect == 'bind' else socket.connect(options.address)
-    if options.type == 'sub':
-        if not options.subscribe:
-            socket.set_string(zmq.SUBSCRIBE, six.u(''))
-        else:
-            for topic in options.subscribe:
-                socket.set_string(zmq.SUBSCRIBE, six.u(topic))
 
     while True:
-        if options.type == 'sub':
-            socket.recv_string() #topic
-        six._print(socket.recv_string())
-    pass
+        input.recv_string() #topic
+        six._print(input.recv_string())
