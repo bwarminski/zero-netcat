@@ -34,7 +34,6 @@ def main(args=sys.argv[1:]):
     parser.add_argument('--topic', default='default_topic')
     parser.add_argument('address', nargs='+', action=AddressAction)
     options = parser.parse_args(args)
-    six._print(options)
     context = zmq.Context.instance(options.io_threads)
     context.set(zmq.IPV6, 1 if options.ipv6 else 0)
     send(context, options) if options.address[0].type in SENDS else receive(context, options)
