@@ -28,16 +28,17 @@ Usage ::
               [--topic TOPIC] [--buffer-size BUFFER_SIZE] [--output OUTPUT]
               address [address ...]
 
-io-threads refers to the number of IO threads to allocate to ZeroMQ
-ipvg enables ipv6 addressing in addition to ipv4
-send-hwm is the number of bytes to be queued before discarding or blocking outgoing messages
-receive-hwm is the number of bytes to be queued before discarding or blocking incoming messages
-subscribe (for SUB sockets) subscribe to a given topic - default is to subscribe to all messages, can be used multiple times
-topic (for PUB sockets) the topic to send messages on (default is ``default_topic``)
-buffer-size is the buffer size to use for incoming reads
-output specifies the file name to write output, default is standard out
+* io-threads refers to the number of IO threads to allocate to ZeroMQ
+* ipv6 enables ipv6 addressing in addition to ipv4
+* send-hwm is the number of bytes to be queued before discarding or blocking outgoing messages
+* receive-hwm is the number of bytes to be queued before discarding or blocking incoming messages
+* subscribe (for SUB sockets) subscribes to a given topic - default is to subscribe to all messages, can be used multiple times
+* topic (for PUB sockets) the topic to send messages on (default is ``default_topic``)
+* buffer-size is the buffer size to use for incoming reads
+* output specifies the file name to write output, default is standard out
 
 address refers to a triple in the format <bind | connect> <socket type> <address>
+
 multiple address of the same direction can be provided (reading or writing)
 
 When multiple addresses are provided, incoming data will be fair queued between address (PUSH-PULL) and outgoing data will be broadcast
