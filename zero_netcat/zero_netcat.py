@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import six, sys, argparse, zmq, codecs, os, zmq.devices
+import six, sys, argparse, zmq, codecs, os, zmq.devices, time
 from six.moves import range
 
 # zeronc <bind|connect> <type> <address>
@@ -32,6 +32,8 @@ def main(args=sys.argv[1:]):
     parser.add_argument('--receive-hwm', type=int, default=1000)
     parser.add_argument('--subscribe', action='append')
     parser.add_argument('--topic', default='default_topic')
+    parser.add_argument('--buffer-size', type=int, default=100)
+    parser.add_argument('--output', default='')
     parser.add_argument('address', nargs='+', action=AddressAction)
     options = parser.parse_args(args)
     context = zmq.Context.instance(options.io_threads)
@@ -54,7 +56,7 @@ def send(context, options):
         proxy.connect_in('inproc://bcast')
         proxy.start()
 
-    input = os.fdopen(sys.stdin.fileno(), 'r', 1)
+    input = codecs.getreader('utf-8')(os.fdopen(sys.stdin.fileno(), 'r', options.buffer_size))
     while True:
         line = input.readline()
         if not line: break
@@ -64,6 +66,10 @@ def send(context, options):
 def receive(context, options):
     input = context.socket(zmq.PULL)
     input.bind('inproc://input')
+    output = sys.stdout.fileno()
+    fdout = len(options.output) > 0
+    if fdout:
+        output = os.open(options.output, os.O_WRONLY)
 
     for addr in options.address:
         proxy = zmq.devices.ThreadProxy(SOCKET_FROM_STR[addr.type], zmq.PUSH)
@@ -81,8 +87,16 @@ def receive(context, options):
             proxy.connect_in(addr.address)
         proxy.connect_out('inproc://input')
         proxy.start()
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
 
-    while True:
-        input.recv_string() #topic
-        six._print(input.recv_string())
+    if fdout:
+        while True:
+            input.recv_string() #topic
+            os.write(output, input.recv_string().encode('utf-8'))
+            os.write(output, '\n'.encode('utf-8'))
+    else:
+        while True:
+            input.recv_string() #topic
+            six.print_(input.recv_string(), flush=True)
+
+
+
