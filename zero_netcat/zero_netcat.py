@@ -96,7 +96,7 @@ def receive(context, options):
     else:
         while True:
             input.recv_string() #topic
-            six.print_(input.recv_string(), flush=True)
+            six.print_(input.recv_string().encode('utf-8'), flush=True)
 
 
 
