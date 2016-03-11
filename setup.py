@@ -25,7 +25,7 @@ test_requirements = [
 
 setup(
     name='zero_netcat',
-    version='0.1.0',
+    version='0.5.0',
     description="Netcat style utility using ZeroMQ sockets",
     long_description=readme + '\n\n' + history,
     author="Brett Warminski",
