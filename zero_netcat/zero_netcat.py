@@ -75,10 +75,10 @@ def receive(context, options):
 
         if addr.type == 'sub':
             if not options.subscribe:
-                socket.set_string(zmq.SUBSCRIBE, six.u('').encode('utf-8'))
+                socket.set_string(zmq.SUBSCRIBE, six.u(''))
             else:
                 for topic in options.subscribe:
-                    socket.set_string(zmq.SUBSCRIBE, six.u(topic).encode('utf-8'))
+                    socket.set_string(zmq.SUBSCRIBE, six.u(topic))
 
         if addr.bind_connect == 'bind':
             socket.bind(addr.address)
